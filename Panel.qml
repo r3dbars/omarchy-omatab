@@ -24,12 +24,29 @@ Panel {
   property bool loading: false
   property bool actionBusy: false
   property string message: ""
+  property string selectedModelId: ""
+  property string actionOutput: ""
+  property string actionError: ""
 
   readonly property bool installed: status.installed === true
   readonly property bool enabled: status.enabled === true
   readonly property bool modelLoaded: status.model_loaded === true
   readonly property var telemetry: status.telemetry || ({})
   readonly property var latency: telemetry.latency_ms || ({})
+  readonly property var availableModels: status.models || []
+  readonly property var selectedModel: modelById(selectedModelId)
+  readonly property var modelOptions: {
+    var options = []
+    for (var i = 0; i < availableModels.length; i++)
+      options.push({ value: availableModels[i].id, label: availableModels[i].label })
+    return options
+  }
+
+  function modelById(id) {
+    for (var i = 0; i < availableModels.length; i++)
+      if (availableModels[i].id === id) return availableModels[i]
+    return ({})
+  }
 
   function formatBytes(value) {
     var bytes = Number(value || 0)
@@ -64,6 +81,23 @@ Panel {
     actionProcess.running = true
   }
 
+  function runModelAction() {
+    if (actionBusy || !selectedModel.id || selectedModel.current) return
+    actionBusy = true
+    actionOutput = ""
+    actionError = ""
+    message = selectedModel.installed ? "Switching model…" :
+      "Downloading " + selectedModel.download_gb + " GB, then testing it…"
+    actionProcess.command = [root.controlPath, "model",
+      selectedModel.installed ? "use" : "install", selectedModel.id]
+    actionProcess.running = true
+  }
+
+  function finalLine(text) {
+    var lines = String(text || "").trim().split("\n")
+    return lines.length > 0 ? lines[lines.length - 1] : ""
+  }
+
   function openLogs() {
     if (!openLogsProcess.running) openLogsProcess.running = true
   }
@@ -95,6 +129,7 @@ Panel {
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
+      blocked: modelDropdown.popupOpen
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
       onTextKey: function(text) {
@@ -169,10 +204,68 @@ Panel {
               fontFamily: root.fontFamily
             }
 
-            InfoRow { label: "Model"; value: root.shortModel(root.status.model) }
+            Dropdown {
+              id: modelDropdown
+              width: parent.width
+              label: "Completion model"
+              value: root.selectedModelId
+              options: root.modelOptions
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              onChanged: function(value) { root.selectedModelId = value }
+            }
+
+            Text {
+              width: parent.width
+              text: String(root.selectedModel.description || "Choose a supported local model.")
+              textFormat: Text.PlainText
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.WordWrap
+            }
+
+            InfoRow { label: "Download"; value: root.selectedModel.download_gb ? root.selectedModel.download_gb + " GB" : "—" }
+            InfoRow { label: "Completion"; value: root.selectedModel.fim ? "Cursor-aware FIM" : "Natural continuation" }
             InfoRow { label: "GPU memory"; value: root.formatBytes(root.status.model_vram_bytes) }
             InfoRow { label: "Context"; value: String(root.status.context_length || "—") + (root.status.context_length ? " tokens" : "") }
             InfoRow { label: "Warmup"; value: root.status.warm_timer === "active" ? "Always ready" : "Not running" }
+
+            Text {
+              visible: root.selectedModel.requires_terms === true
+              width: parent.width
+              text: "Gemma requires accepting Google’s model terms on Hugging Face before downloading."
+              textFormat: Text.PlainText
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.WordWrap
+            }
+
+            Row {
+              width: parent.width
+              spacing: Style.space(8)
+
+              Button {
+                visible: root.selectedModel.requires_terms === true
+                width: (parent.width - parent.spacing) * 0.42
+                text: "Review terms"
+                bordered: true
+                focusable: true
+                onClicked: if (!modelTermsProcess.running) modelTermsProcess.running = true
+              }
+
+              Button {
+                width: root.selectedModel.requires_terms === true
+                  ? (parent.width - parent.spacing) * 0.58 : parent.width
+                text: root.selectedModel.current ? "Current model" :
+                  root.selectedModel.installed ? "Use model" : "Download & use"
+                bordered: true
+                focusable: true
+                enabled: !root.actionBusy && !root.selectedModel.current && !!root.selectedModel.id
+                onClicked: root.runModelAction()
+              }
+            }
           }
 
           PanelSeparator { foreground: root.foreground }
@@ -274,7 +367,7 @@ Panel {
 
           Text {
             width: parent.width
-            text: "This first panel is intentionally small. Model selection and tuning controls come after the layout feels right."
+            text: "Downloads are verified and warmed before Tilde switches models. Your current model stays active if setup fails."
             textFormat: Text.PlainText
             color: root.dim
             font.family: root.fontFamily
@@ -358,7 +451,9 @@ Panel {
       onStreamFinished: {
         try {
           root.status = JSON.parse(text)
-          root.message = ""
+          if (root.selectedModelId === "" || root.selectedModelId === "custom")
+            root.selectedModelId = String(root.status.model_id || "")
+          if (!root.actionBusy) root.message = ""
         } catch (error) {
           root.message = "Could not read Tilde status."
         }
@@ -371,11 +466,18 @@ Panel {
   Process {
     id: actionProcess
     command: []
-    stdout: StdioCollector { waitForEnd: true }
-    stderr: StdioCollector { waitForEnd: true }
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.actionOutput = text
+    }
+    stderr: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.actionError = text
+    }
     onExited: function(exitCode) {
       root.actionBusy = false
-      root.message = exitCode === 0 ? "Done." : "That action failed."
+      var detail = root.finalLine(exitCode === 0 ? root.actionOutput : root.actionError)
+      root.message = detail !== "" ? detail : (exitCode === 0 ? "Done." : "That action failed.")
       actionRefresh.restart()
     }
   }
@@ -383,6 +485,11 @@ Panel {
   Process {
     id: openLogsProcess
     command: ["xdg-open", root.statePath]
+  }
+
+  Process {
+    id: modelTermsProcess
+    command: ["xdg-open", "https://huggingface.co/google/gemma-3-4b-pt-qat-q4_0-gguf"]
   }
 
   Timer {
