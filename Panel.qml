@@ -222,6 +222,7 @@ Panel {
             }
 
             InfoRow { label: "Writing context"; value: "Textbox + visible window" }
+            InfoRow { label: "Input method"; value: String(root.status.input_method || "Not selected") }
             InfoRow { label: "Inference"; value: "Local Ollama" }
             InfoRow { label: "Telemetry"; value: root.status.telemetry_enabled ? "Private · local only" : "Off" }
           }
