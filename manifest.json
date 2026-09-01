@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "r3dbars.tilde",
+  "name": "Tilde",
+  "version": "0.1.0",
+  "author": "r3dbars",
+  "license": "MIT",
+  "description": "Control and monitor Tilde's private local AI autocomplete.",
+  "kinds": ["bar-widget"],
+  "activation": "on-demand",
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Tilde",
+    "description": "Local AI autocomplete status, quality, and controls.",
+    "category": "AI",
+    "aliases": ["autocomplete", "writing", "local-ai"],
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
