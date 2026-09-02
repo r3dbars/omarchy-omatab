@@ -39,12 +39,16 @@ BarWidget {
   }
 
   function applyStatus(raw) {
-    try {
-      root.status = JSON.parse(raw)
-    } catch (error) {
-      // Keep the last good state; an empty read means the CLI is missing.
-      if (raw.trim() === "") root.status = ({})
-    }
+    // Only whitelisted, size-bounded fields come out of the helper's JSON.
+    var parsed = Model.parseStatus(raw)
+    if (parsed) root.status = parsed
+    else if (String(raw).trim() === "") root.status = ({})
+    // Otherwise keep the last good state.
+  }
+
+  Component.onDestruction: {
+    statusProcess.running = false
+    toggleProcess.running = false
   }
 
   function injectPanel() {
@@ -89,7 +93,9 @@ BarWidget {
     id: statusProcess
     // --brief skips the quality report, so this poll costs a few
     // milliseconds instead of half a second.
-    command: [root.controlPath, "status", "--json", "--brief"]
+    // `timeout` gives the helper a deadline and kills its whole process
+    // group if it hangs, so a stuck poll can never wedge the widget.
+    command: ["timeout", "--kill-after=2", "8", root.controlPath, "status", "--json", "--brief"]
     // A process that never starts produces no output, so the stale-data
     // rule would keep an old "on" forever. No start means no CLI.
     property bool launched: false
@@ -107,7 +113,7 @@ BarWidget {
 
   Process {
     id: toggleProcess
-    command: [root.controlPath, "toggle"]
+    command: ["timeout", "--kill-after=2", "15", root.controlPath, "toggle"]
     onExited: function() {
       root.actionBusy = false
       root.refresh()

@@ -54,14 +54,25 @@ Panel {
     statusProcess.running = true
   }
 
+  // Every helper call runs under `timeout`, which kills the whole process
+  // group at the deadline. Model downloads are the only slow action.
+  function deadlineFor(args) {
+    return args[0] === "model" ? "2400" : "60"
+  }
+
   function runAction(args, busyMessage) {
     if (actionBusy) return
     actionBusy = true
     actionOutput = ""
     actionError = ""
     message = busyMessage || ""
-    actionProcess.command = [root.controlPath].concat(args)
+    actionProcess.command = ["timeout", "--kill-after=5", deadlineFor(args), root.controlPath].concat(args)
     actionProcess.running = true
+  }
+
+  Component.onDestruction: {
+    statusProcess.running = false
+    actionProcess.running = false
   }
 
   function runModelAction() {
@@ -536,7 +547,7 @@ Panel {
 
   Process {
     id: statusProcess
-    command: [root.controlPath, "status", "--json"]
+    command: ["timeout", "--kill-after=2", "10", root.controlPath, "status", "--json"]
     // No start means no CLI: show the install state, not stale data.
     property bool launched: false
     onStarted: launched = true
@@ -547,13 +558,14 @@ Panel {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        try {
-          root.status = JSON.parse(text)
+        // Whitelisted and size-bounded; a bad or oversized read keeps the
+        // last good status rather than blanking the panel.
+        var parsed = Model.parseStatus(text)
+        if (parsed) {
+          root.status = parsed
           if (root.selectedModelId === "" || root.selectedModelId === "custom")
             root.selectedModelId = String(root.status.model_id || "")
           if (!root.actionBusy) root.message = ""
-        } catch (error) {
-          // Keep what we had rather than blanking the panel on a bad read.
         }
         root.loading = false
       }
@@ -566,16 +578,17 @@ Panel {
     command: []
     stdout: StdioCollector {
       waitForEnd: true
-      onStreamFinished: root.actionOutput = text
+      onStreamFinished: root.actionOutput = Model.str(text, 4096)
     }
     stderr: StdioCollector {
       waitForEnd: true
-      onStreamFinished: root.actionError = text
+      onStreamFinished: root.actionError = Model.str(text, 4096)
     }
     onExited: function(exitCode) {
       root.actionBusy = false
       var detail = Model.finalLine(exitCode === 0 ? root.actionOutput : root.actionError)
-      root.message = exitCode === 0 ? "" : (detail !== "" ? detail : "That did not work.")
+      if (exitCode === 124 || exitCode === 137) root.message = "That took too long and was stopped."
+      else root.message = exitCode === 0 ? "" : (detail !== "" ? Model.str(detail, 200) : "That did not work.")
       actionRefresh.restart()
     }
   }

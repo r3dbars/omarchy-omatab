@@ -93,3 +93,89 @@ function modelById(models, id) {
     if (list[i].id === id) return list[i]
   return {}
 }
+
+// ---- bounded status parsing ----
+// The status JSON comes from a helper process. Only whitelisted fields are
+// copied out, every string is truncated, every list is capped, and input
+// larger than MAX_STATUS_BYTES is rejected outright, so nothing unbounded
+// ever reaches a long-lived QML model.
+
+var MAX_STATUS_BYTES = 262144
+var MAX_MODELS = 24
+var MAX_KEYS = 8
+var SHORT = 64
+var LONG = 240
+
+function str(value, max) {
+  if (value === undefined || value === null) return ""
+  var text = String(value)
+  return text.length > max ? text.slice(0, max) : text
+}
+
+function num(value) {
+  var number = Number(value)
+  return isFinite(number) ? number : null
+}
+
+function bool(value) { return value === true }
+
+function parseModel(raw) {
+  var m = raw || {}
+  return {
+    id: str(m.id, SHORT),
+    label: str(m.label, SHORT),
+    description: str(m.description, LONG),
+    download_gb: num(m.download_gb),
+    installed: bool(m.installed),
+    current: bool(m.current),
+    requires_terms: bool(m.requires_terms)
+  }
+}
+
+// Returns a bounded status object, or null when the text is empty, too
+// large, or not JSON.
+function parseStatus(raw) {
+  var text = String(raw || "")
+  if (text.length === 0 || text.length > MAX_STATUS_BYTES) return null
+  var data
+  try { data = JSON.parse(text) } catch (error) { return null }
+  if (!data || typeof data !== "object") return null
+
+  var settings = data.settings && typeof data.settings === "object" ? data.settings : {}
+  var keys = []
+  var rawKeys = Array.isArray(settings.full_accept_keys) ? settings.full_accept_keys : []
+  for (var k = 0; k < rawKeys.length && k < MAX_KEYS; k++) keys.push(str(rawKeys[k], SHORT))
+
+  var models = []
+  var rawModels = Array.isArray(data.models) ? data.models : []
+  for (var i = 0; i < rawModels.length && i < MAX_MODELS; i++) models.push(parseModel(rawModels[i]))
+
+  var telemetry = data.telemetry && typeof data.telemetry === "object" ? data.telemetry : {}
+  var latency = telemetry.latency_ms && typeof telemetry.latency_ms === "object" ? telemetry.latency_ms : {}
+  var setup = data.setup && typeof data.setup === "object" ? {
+    stage: str(data.setup.stage, SHORT),
+    detail: str(data.setup.detail, LONG),
+    running: bool(data.setup.running)
+  } : null
+
+  return {
+    installed: bool(data.installed),
+    enabled: bool(data.enabled),
+    service: str(data.service, SHORT),
+    model_loaded: bool(data.model_loaded),
+    model_id: str(data.model_id, SHORT),
+    model_vram_bytes: num(data.model_vram_bytes),
+    models: models,
+    settings: {
+      ocr: bool(settings.ocr),
+      telemetry: bool(settings.telemetry),
+      full_accept_keys: keys
+    },
+    telemetry: {
+      shown_count: num(telemetry.shown_count),
+      acceptance_rate: num(telemetry.acceptance_rate),
+      latency_ms: { p50: num(latency.p50) }
+    },
+    setup: setup
+  }
+}

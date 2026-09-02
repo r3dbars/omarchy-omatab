@@ -76,3 +76,44 @@ test("model helpers build dropdown options and look up by id", function() {
   assert.deepEqual(plain(Model.modelById(models, "zzz")), {})
   assert.deepEqual(plain(Model.modelOptions(undefined)), [])
 })
+
+test("parseStatus whitelists, truncates, and caps", function() {
+  var big = new Array(400).join("x")
+  var models = []
+  for (var i = 0; i < 100; i++) models.push({ id: "m" + i, label: big, evil: "no" })
+  var raw = JSON.stringify({
+    installed: true, enabled: "yes", service: "active", model_loaded: true,
+    model_id: big, extra: { deep: true },
+    models: models,
+    settings: { ocr: true, telemetry: 1, full_accept_keys: new Array(50).join("k ").split(" ") },
+    telemetry: { shown_count: "12", acceptance_rate: 0.25, latency_ms: { p50: 74.2 } },
+    setup: { stage: "model", detail: big, running: true, pid: 5 }
+  })
+  var status = plain(Model.parseStatus(raw))
+  assert.equal(status.installed, true)
+  assert.equal(status.enabled, false, "non-boolean enabled is false")
+  assert.equal(status.model_id.length, 64)
+  assert.equal(status.extra, undefined, "unknown fields dropped")
+  assert.equal(status.models.length, 24)
+  assert.equal(status.models[0].label.length, 64)
+  assert.equal(status.models[0].evil, undefined)
+  assert.equal(status.settings.telemetry, false)
+  assert.equal(status.settings.full_accept_keys.length, 8)
+  assert.equal(status.telemetry.shown_count, 12)
+  assert.equal(status.telemetry.latency_ms.p50, 74.2)
+  assert.equal(status.setup.detail.length, 240)
+  assert.equal(status.setup.running, true)
+  assert.equal(status.setup.pid, undefined)
+})
+
+test("parseStatus rejects empty, oversized, and non-JSON input", function() {
+  assert.equal(Model.parseStatus(""), null)
+  assert.equal(Model.parseStatus("not json"), null)
+  assert.equal(Model.parseStatus("[1,2]") === null, false, "arrays are objects; fields default")
+  assert.equal(Model.parseStatus("null"), null)
+  assert.equal(Model.parseStatus(new Array(262146).join("{")), null)
+  var ok = Model.parseStatus("{}")
+  assert.equal(ok.installed, false)
+  assert.equal(ok.models.length, 0)
+  assert.equal(ok.setup, null)
+})
