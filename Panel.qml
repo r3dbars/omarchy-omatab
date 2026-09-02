@@ -226,7 +226,7 @@ Panel {
 
             Text {
               width: parent.width
-              text: "Opens a terminal you can watch and asks for your password to install packages. It installs Ollama, builds Oma Tab, makes it your Fcitx input method, and downloads a model sized to your GPU (2 to 4 GB). A few minutes."
+              text: "Opens a terminal you can watch and asks for your password to install packages. It installs Ollama, builds Oma Tab, makes it your Fcitx input method, and downloads a model sized to your GPU (2 to 5 GB). A few minutes."
               textFormat: Text.PlainText
               color: root.dim
               font.family: root.fontFamily
@@ -566,14 +566,21 @@ Panel {
       }
     }
     onExited: {
-      // Whitelisted and size-bounded; a bad or overrun read keeps the last
-      // good status rather than blanking the panel.
-      var parsed = (outReader && !outReader.overflow) ? Model.parseStatus(Model.readerText(outReader)) : null
+      // An overrun read keeps the last good status rather than blanking the
+      // panel; the next poll tries again.
+      if (outReader && outReader.overflow) { root.loading = false; return }
+      // Whitelisted and size-bounded.
+      var text = Model.readerText(outReader)
+      var parsed = Model.parseStatus(text)
       if (parsed) {
         root.status = parsed
         if (root.selectedModelId === "" || root.selectedModelId === "custom")
           root.selectedModelId = String(root.status.model_id || "")
         if (!root.actionBusy) root.message = ""
+      } else if (String(text).trim() === "") {
+        // Nothing on stdout means no CLI to ask (the wrapper exits 127).
+        // Show the install state rather than stale data.
+        root.status = ({})
       }
       root.loading = false
     }
