@@ -30,7 +30,8 @@ omarchy plugin add https://github.com/r3dbars/omarchy-omatab.git --enable
 Then click the `⇥` in the bar and press **Install Oma Tab**. That runs
 `install.sh` in a floating terminal. It:
 
-- clones Oma Tab into `~/.local/src/omatab` and runs its bootstrap;
+- fetches Oma Tab into `~/.local/src/omatab`, checked out at the exact
+  commit pinned in `install.sh`, and runs its bootstrap;
 - asks for your password once, to install packages with `pacman` and to
   enable the Ollama service;
 - builds Oma Tab and installs it under `~/.local`;
@@ -49,8 +50,9 @@ yourself.
 omarchy plugin update r3dbars.omatab   # the widget
 ```
 
-Press **Update Oma Tab** in the panel, or run `omatab update`, for Oma Tab
-itself.
+Each widget release pins the Oma Tab commit it installs. After updating the
+widget, press **Update Oma Tab** in the panel (or run `install.sh` again) to
+move Oma Tab to that pinned version.
 
 ## Remove
 
