@@ -30,15 +30,22 @@ omarchy plugin add https://github.com/r3dbars/omarchy-omatab.git --enable
 Then click the `⇥` in the bar and press **Install Oma Tab**. That runs
 `install.sh` in a floating terminal. It:
 
-- fetches Oma Tab into `~/.local/src/omatab`, checked out at the exact
-  commit pinned in `install.sh`, and runs its bootstrap;
+- fetches Oma Tab into a throwaway directory, checked out at the exact commit
+  pinned in `install.sh`, with Git's own configuration, hooks, and non-HTTPS
+  transports switched off, and runs its bootstrap from there;
 - asks for your password once, to install packages with `pacman` and to
   enable the Ollama service;
 - builds Oma Tab and installs it under `~/.local`;
 - adds Oma Tab to your Fcitx input-method group and makes it the default,
   and installs a user D-Bus service file that routes Fcitx activation to
   Omarchy's Fcitx unit;
-- downloads a model sized to your GPU (2 to 4 GB).
+- downloads a model sized to your GPU (2 to 5 GB), and checks it against the
+  digest Oma Tab pins for it before anything loads it;
+- moves the verified source tree into `~/.local/src/omatab` once the build and
+  install have succeeded, replacing whatever was there.
+
+Nothing from a previous install is reused, so no leftover checkout or build
+directory can influence what gets built or run.
 
 Adding or enabling the plugin never runs any of that. Setup only starts when
 you press the button, or run `~/.config/omarchy/plugins/r3dbars.omatab/install.sh`

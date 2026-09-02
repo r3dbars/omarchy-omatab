@@ -94,6 +94,64 @@ function modelById(models, id) {
   return {}
 }
 
+// ---- bounded stream reading ----
+// Helper output is read one chunk at a time and counted as it arrives, so
+// the ceiling limits what the process can write, not just what is kept.
+// Crossing it discards the read and tells the caller to stop the process,
+// which kills the whole helper process group at that moment.
+
+var MAX_ACTION_BYTES = 4096
+var MAX_STDERR_BYTES = 4096
+
+// Bytes this text occupies as UTF-8, without encoding a copy of it.
+function utf8Length(text) {
+  var bytes = 0
+  for (var i = 0; i < text.length; i++) {
+    var code = text.charCodeAt(i)
+    if (code < 0x80) bytes += 1
+    else if (code < 0x800) bytes += 2
+    else if (code >= 0xd800 && code <= 0xdbff) { bytes += 4; i += 1 }
+    else bytes += 3
+  }
+  return bytes
+}
+
+// The command a widget actually runs. The timeout wrapper stays the direct
+// child, so stopping the process still signals the whole group, and the
+// helper writes through head, which stops it at the ceiling before its bytes
+// ever reach the widget. The reader below enforces the same ceilings a second
+// time on whatever does arrive.
+function boundedCommand(seconds, killAfter, controlPath, args, stdoutLimit) {
+  var script = 'set -o pipefail; "$@" 2> >(head -c ' + MAX_STDERR_BYTES +
+    ' >&2) | head -c ' + stdoutLimit
+  return ["timeout", "--kill-after=" + killAfter, String(seconds),
+          "bash", "-c", script, "bash", String(controlPath)].concat(args || [])
+}
+
+function newReader(limitBytes) {
+  return { limit: limitBytes, bytes: 0, overflow: false, parts: [] }
+}
+
+// Returns false once the ceiling is crossed. The caller must then stop the
+// process; nothing at or past the ceiling is kept.
+function readerPush(reader, chunk) {
+  if (!reader || reader.overflow) return false
+  var text = (chunk === undefined || chunk === null) ? "" : String(chunk)
+  reader.bytes += utf8Length(text)
+  if (reader.bytes > reader.limit) {
+    reader.overflow = true
+    reader.parts = []
+    return false
+  }
+  reader.parts.push(text)
+  return true
+}
+
+function readerText(reader) {
+  if (!reader || reader.overflow) return ""
+  return reader.parts.join("")
+}
+
 // ---- bounded status parsing ----
 // The status JSON comes from a helper process. Only whitelisted fields are
 // copied out, every string is truncated, every list is capped, and input

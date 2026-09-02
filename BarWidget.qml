@@ -95,28 +95,67 @@ BarWidget {
     // milliseconds instead of half a second.
     // `timeout` gives the helper a deadline and kills its whole process
     // group if it hangs, so a stuck poll can never wedge the widget.
-    command: ["timeout", "--kill-after=2", "8", root.controlPath, "status", "--json", "--brief"]
+    command: Model.boundedCommand(8, 2, root.controlPath,
+      ["status", "--json", "--brief"], Model.MAX_STATUS_BYTES)
     // A process that never starts produces no output, so the stale-data
     // rule would keep an old "on" forever. No start means no CLI.
     property bool launched: false
+    // Both streams are counted as they arrive and capped; see Model.js.
+    property var outReader: null
+    property var errReader: null
     onStarted: launched = true
     onRunningChanged: {
-      if (running) launched = false
-      else if (!launched) root.status = ({})
+      if (running) {
+        launched = false
+        outReader = Model.newReader(Model.MAX_STATUS_BYTES)
+        errReader = Model.newReader(Model.MAX_STDERR_BYTES)
+      } else if (!launched) {
+        root.status = ({})
+      }
     }
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: root.applyStatus(text)
+    // The whole reply is in hand once the helper is gone. An overrun poll
+    // leaves the last good status in place; the next tick tries again.
+    onExited: if (outReader && !outReader.overflow) root.applyStatus(Model.readerText(outReader))
+    stdout: SplitParser {
+      // No split marker: every read is delivered as it arrives rather than
+      // being buffered until a delimiter or the end of the stream.
+      splitMarker: ""
+      onRead: function(data) {
+        if (!Model.readerPush(statusProcess.outReader, data)) statusProcess.running = false
+      }
     }
-    stderr: StdioCollector { waitForEnd: true }
+    stderr: SplitParser {
+      splitMarker: ""
+      onRead: function(data) {
+        if (!Model.readerPush(statusProcess.errReader, data)) statusProcess.running = false
+      }
+    }
   }
 
   Process {
     id: toggleProcess
-    command: ["timeout", "--kill-after=2", "15", root.controlPath, "toggle"]
+    command: Model.boundedCommand(15, 2, root.controlPath, ["toggle"], Model.MAX_ACTION_BYTES)
+    property var outReader: null
+    property var errReader: null
+    onRunningChanged: if (running) {
+      outReader = Model.newReader(Model.MAX_ACTION_BYTES)
+      errReader = Model.newReader(Model.MAX_STDERR_BYTES)
+    }
     onExited: function() {
       root.actionBusy = false
       root.refresh()
+    }
+    stdout: SplitParser {
+      splitMarker: ""
+      onRead: function(data) {
+        if (!Model.readerPush(toggleProcess.outReader, data)) toggleProcess.running = false
+      }
+    }
+    stderr: SplitParser {
+      splitMarker: ""
+      onRead: function(data) {
+        if (!Model.readerPush(toggleProcess.errReader, data)) toggleProcess.running = false
+      }
     }
   }
 

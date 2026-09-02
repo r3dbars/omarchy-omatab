@@ -57,7 +57,7 @@ Panel {
   // Every helper call runs under `timeout`, which kills the whole process
   // group at the deadline. Model downloads are the only slow action.
   function deadlineFor(args) {
-    return args[0] === "model" ? "2400" : "60"
+    return args[0] === "model" ? 2400 : 60
   }
 
   function runAction(args, busyMessage) {
@@ -66,7 +66,8 @@ Panel {
     actionOutput = ""
     actionError = ""
     message = busyMessage || ""
-    actionProcess.command = ["timeout", "--kill-after=5", deadlineFor(args), root.controlPath].concat(args)
+    actionProcess.command = Model.boundedCommand(deadlineFor(args), 5, root.controlPath,
+      args, Model.MAX_ACTION_BYTES)
     actionProcess.running = true
   }
 
@@ -547,47 +548,81 @@ Panel {
 
   Process {
     id: statusProcess
-    command: ["timeout", "--kill-after=2", "10", root.controlPath, "status", "--json"]
+    command: Model.boundedCommand(10, 2, root.controlPath, ["status", "--json"], Model.MAX_STATUS_BYTES)
     // No start means no CLI: show the install state, not stale data.
     property bool launched: false
+    // Both streams are counted as they arrive and capped; see Model.js.
+    property var outReader: null
+    property var errReader: null
     onStarted: launched = true
     onRunningChanged: {
-      if (running) launched = false
-      else if (!launched) { root.status = ({}); root.loading = false }
-    }
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        // Whitelisted and size-bounded; a bad or oversized read keeps the
-        // last good status rather than blanking the panel.
-        var parsed = Model.parseStatus(text)
-        if (parsed) {
-          root.status = parsed
-          if (root.selectedModelId === "" || root.selectedModelId === "custom")
-            root.selectedModelId = String(root.status.model_id || "")
-          if (!root.actionBusy) root.message = ""
-        }
+      if (running) {
+        launched = false
+        outReader = Model.newReader(Model.MAX_STATUS_BYTES)
+        errReader = Model.newReader(Model.MAX_STDERR_BYTES)
+      } else if (!launched) {
+        root.status = ({})
         root.loading = false
       }
     }
-    stderr: StdioCollector { waitForEnd: true }
+    onExited: {
+      // Whitelisted and size-bounded; a bad or overrun read keeps the last
+      // good status rather than blanking the panel.
+      var parsed = (outReader && !outReader.overflow) ? Model.parseStatus(Model.readerText(outReader)) : null
+      if (parsed) {
+        root.status = parsed
+        if (root.selectedModelId === "" || root.selectedModelId === "custom")
+          root.selectedModelId = String(root.status.model_id || "")
+        if (!root.actionBusy) root.message = ""
+      }
+      root.loading = false
+    }
+    stdout: SplitParser {
+      // No split marker: every read is delivered as it arrives rather than
+      // being buffered until a delimiter or the end of the stream.
+      splitMarker: ""
+      onRead: function(data) {
+        if (!Model.readerPush(statusProcess.outReader, data)) statusProcess.running = false
+      }
+    }
+    stderr: SplitParser {
+      splitMarker: ""
+      onRead: function(data) {
+        if (!Model.readerPush(statusProcess.errReader, data)) statusProcess.running = false
+      }
+    }
   }
 
   Process {
     id: actionProcess
     command: []
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: root.actionOutput = Model.str(text, 4096)
+    property var outReader: null
+    property var errReader: null
+    onRunningChanged: if (running) {
+      outReader = Model.newReader(Model.MAX_ACTION_BYTES)
+      errReader = Model.newReader(Model.MAX_STDERR_BYTES)
     }
-    stderr: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: root.actionError = Model.str(text, 4096)
+    stdout: SplitParser {
+      splitMarker: ""
+      onRead: function(data) {
+        if (!Model.readerPush(actionProcess.outReader, data)) actionProcess.running = false
+      }
+    }
+    stderr: SplitParser {
+      splitMarker: ""
+      onRead: function(data) {
+        if (!Model.readerPush(actionProcess.errReader, data)) actionProcess.running = false
+      }
     }
     onExited: function(exitCode) {
       root.actionBusy = false
+      var overran = (outReader && outReader.overflow) || (errReader && errReader.overflow)
+      root.actionOutput = Model.readerText(outReader)
+      root.actionError = Model.readerText(errReader)
       var detail = Model.finalLine(exitCode === 0 ? root.actionOutput : root.actionError)
-      if (exitCode === 124 || exitCode === 137) root.message = "That took too long and was stopped."
+      // 141 is the helper stopped by the output cap itself.
+      if (overran || exitCode === 141) root.message = "That printed more than expected and was stopped."
+      else if (exitCode === 124 || exitCode === 137) root.message = "That took too long and was stopped."
       else root.message = exitCode === 0 ? "" : (detail !== "" ? Model.str(detail, 200) : "That did not work.")
       actionRefresh.restart()
     }

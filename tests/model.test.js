@@ -117,3 +117,75 @@ test("parseStatus rejects empty, oversized, and non-JSON input", function() {
   assert.equal(ok.models.length, 0)
   assert.equal(ok.setup, null)
 })
+
+test("utf8Length counts bytes, not characters", function() {
+  assert.equal(Model.utf8Length("abc"), 3)
+  assert.equal(Model.utf8Length("·"), 2)
+  assert.equal(Model.utf8Length("—"), 3)
+  assert.equal(Model.utf8Length("😀"), 4)
+  assert.equal(Model.utf8Length(""), 0)
+})
+
+test("a reader keeps chunks while they fit under its ceiling", function() {
+  var reader = Model.newReader(16)
+  assert.equal(Model.readerPush(reader, "abc"), true)
+  assert.equal(Model.readerPush(reader, "def"), true)
+  assert.equal(reader.bytes, 6)
+  assert.equal(reader.overflow, false)
+  assert.equal(Model.readerText(reader), "abcdef")
+})
+
+test("crossing the ceiling stops the read and drops what was collected", function() {
+  var reader = Model.newReader(8)
+  assert.equal(Model.readerPush(reader, "12345678"), true)
+  assert.equal(Model.readerPush(reader, "9"), false, "the caller must stop the process")
+  assert.equal(reader.overflow, true)
+  assert.equal(Model.readerText(reader), "", "nothing past the ceiling is kept")
+  assert.equal(Model.readerPush(reader, "more"), false, "an overrun reader stays closed")
+})
+
+test("the ceiling counts encoded bytes, so multibyte text cannot slip past", function() {
+  var reader = Model.newReader(8)
+  assert.equal(Model.readerPush(reader, "——"), true)
+  assert.equal(Model.readerPush(reader, "—"), false)
+  assert.equal(reader.overflow, true)
+})
+
+test("readers tolerate a missing reader and empty chunks", function() {
+  assert.equal(Model.readerPush(null, "x"), false)
+  assert.equal(Model.readerText(null), "")
+  var reader = Model.newReader(4)
+  assert.equal(Model.readerPush(reader, undefined), true)
+  assert.equal(Model.readerPush(reader, null), true)
+  assert.equal(Model.readerText(reader), "")
+})
+
+test("the stream ceilings are the ones the widgets rely on", function() {
+  assert.equal(Model.MAX_STATUS_BYTES, 262144)
+  assert.equal(Model.MAX_ACTION_BYTES, 4096)
+  assert.equal(Model.MAX_STDERR_BYTES, 4096)
+  assert.equal(Model.parseStatus("x".repeat(Model.MAX_STATUS_BYTES + 1)), null)
+})
+
+test("boundedCommand caps the helper itself and keeps timeout the direct child", function() {
+  var command = Model.boundedCommand(8, 2, "/home/x/.local/bin/omatab",
+    ["status", "--json", "--brief"], Model.MAX_STATUS_BYTES)
+  assert.equal(command[0], "timeout")
+  assert.equal(command[1], "--kill-after=2")
+  assert.equal(command[2], "8")
+  assert.equal(command[3], "bash")
+  assert.equal(command[4], "-c")
+  assert.match(command[5], /^set -o pipefail;/)
+  assert.match(command[5], /head -c 4096 >&2/, "stderr is capped")
+  assert.match(command[5], /head -c 262144$/, "stdout is capped")
+  assert.deepEqual(plain(command.slice(6)),
+    ["bash", "/home/x/.local/bin/omatab", "status", "--json", "--brief"],
+    "the helper and its arguments are passed as arguments, never spliced into the script")
+})
+
+test("boundedCommand never puts a caller-supplied value in the script text", function() {
+  var command = Model.boundedCommand(60, 5, "/tmp/a b/omatab", ["model", "install", "; rm -rf /"], 4096)
+  assert.equal(command[5].indexOf("rm -rf"), -1)
+  assert.equal(command[5].indexOf("/tmp/a b"), -1)
+  assert.equal(command[command.length - 1], "; rm -rf /")
+})
