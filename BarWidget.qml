@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Io
 import qs.Commons
 import qs.Ui
+import "Model.js" as Model
 
 // The "~" in the bar. Click opens the panel; right-click pauses or resumes
 // suggestions without opening anything.
@@ -11,11 +12,12 @@ BarWidget {
   moduleName: "r3dbars.omatab"
 
   readonly property string controlPath: Quickshell.env("HOME") + "/.local/bin/omatab"
-  property bool installed: false
-  property bool suggesting: false
-  property bool ready: false
-  property bool settingUp: false
+  property var status: ({})
   property bool actionBusy: false
+  readonly property bool installed: status.installed === true
+  readonly property bool suggesting: status.enabled === true && status.service === "active"
+  readonly property bool ready: status.model_loaded === true
+  readonly property bool settingUp: !!(status.setup && status.setup.running === true)
 
   readonly property bool opened: panelLoader.item ? panelLoader.item.opened === true : false
   readonly property bool popoutSwitchClosing: panelLoader.item ? panelLoader.item.popoutSwitchClosing === true : false
@@ -38,25 +40,11 @@ BarWidget {
 
   function applyStatus(raw) {
     try {
-      var status = JSON.parse(raw)
-      root.installed = status.installed === true
-      root.suggesting = status.enabled === true && status.service === "active"
-      root.ready = status.model_loaded === true
-      root.settingUp = !!(status.setup && status.setup.running === true)
+      root.status = JSON.parse(raw)
     } catch (error) {
-      root.installed = false
-      root.suggesting = false
-      root.ready = false
-      root.settingUp = false
+      // Keep the last good state; an empty read means the CLI is missing.
+      if (raw.trim() === "") root.status = ({})
     }
-  }
-
-  function tooltip() {
-    if (root.settingUp) return "Oma Tab is setting up…"
-    if (!root.installed) return "Oma Tab is not installed · click to install"
-    if (!root.suggesting) return "Oma Tab is paused · right-click to resume"
-    if (!root.ready) return "Oma Tab is on · model warming up"
-    return "Oma Tab is on · right-click to pause"
   }
 
   function injectPanel() {
@@ -69,6 +57,7 @@ BarWidget {
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
   onBarChanged: injectPanel()
+  onSettingsChanged: injectPanel()
 
   Loader {
     id: panelLoader
@@ -89,7 +78,7 @@ BarWidget {
     fontSize: Style.font.title
     active: root.installed && root.suggesting
     dimmed: !root.installed || !root.ready
-    tooltipText: root.tooltip()
+    tooltipText: Model.tooltip(root.status)
     onPressed: function(buttonCode) {
       if (buttonCode === Qt.RightButton) root.quickToggle()
       else root.toggle()
@@ -98,7 +87,9 @@ BarWidget {
 
   Process {
     id: statusProcess
-    command: [root.controlPath, "status", "--json"]
+    // --brief skips the quality report, so this poll costs a few
+    // milliseconds instead of half a second.
+    command: [root.controlPath, "status", "--json", "--brief"]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: root.applyStatus(text)
@@ -116,7 +107,7 @@ BarWidget {
   }
 
   Timer {
-    interval: root.settingUp ? 2000 : 5000
+    interval: root.settingUp ? 2000 : 10000
     running: true
     repeat: true
     triggeredOnStart: true

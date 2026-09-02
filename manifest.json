@@ -2,12 +2,11 @@
   "schemaVersion": 1,
   "id": "r3dbars.omatab",
   "name": "Oma Tab",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "r3dbars",
   "license": "MIT",
   "description": "Private, local AI autocomplete for everything you type on Omarchy. Press Tab to take a word.",
   "kinds": ["bar-widget"],
-  "activation": "on-demand",
   "entryPoints": {
     "barWidget": "BarWidget.qml"
   },
@@ -15,7 +14,6 @@
     "displayName": "Oma Tab",
     "description": "Turn local AI autocomplete on or off, pick a model, and see how it is doing.",
     "category": "AI",
-    "aliases": ["autocomplete", "writing", "local-ai", "tab", "omatab"],
     "allowMultiple": false,
     "defaultSection": "right"
   }

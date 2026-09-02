@@ -4,19 +4,21 @@ import Quickshell
 import Quickshell.Io
 import qs.Commons
 import qs.Ui
+import "Model.js" as Model
 
 // Three states, top to bottom: not installed (one button), setting up
 // (progress line), and ready (switch, keys, two settings, model, numbers).
 Panel {
   id: root
   moduleName: "r3dbars.omatab"
-  manageIpc: false
+  // `omarchy-shell ipc call r3dbars.omatab toggle` and friends.
+  ipcTarget: "r3dbars.omatab"
 
   property var anchorItem: null
   property var hostWidget: null
   readonly property string controlPath: Quickshell.env("HOME") + "/.local/bin/omatab"
   readonly property string statePath: Quickshell.env("HOME") + "/.local/state/omatab"
-  readonly property string installerPath: String(Qt.resolvedUrl("install.sh")).replace(/^file:\/\//, "")
+  readonly property string installerPath: Model.pathFromUrl(Qt.resolvedUrl("install.sh"))
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property color accent: Color.accent
   readonly property color urgent: bar ? bar.urgent : Color.urgent
@@ -43,60 +45,8 @@ Panel {
   readonly property var latency: telemetry.latency_ms || ({})
   readonly property bool hasNumbers: Number(telemetry.shown_count || 0) > 0
   readonly property var availableModels: status.models || []
-  readonly property var selectedModel: modelById(selectedModelId)
-  readonly property var modelOptions: {
-    var options = []
-    for (var i = 0; i < availableModels.length; i++)
-      options.push({ value: availableModels[i].id, label: availableModels[i].label })
-    return options
-  }
-
-  function modelById(id) {
-    for (var i = 0; i < availableModels.length; i++)
-      if (availableModels[i].id === id) return availableModels[i]
-    return ({})
-  }
-
-  function formatBytes(value) {
-    var bytes = Number(value || 0)
-    if (!(bytes > 0)) return "—"
-    return (bytes / 1000000000).toFixed(1) + " GB"
-  }
-
-  function percent(value) {
-    var number = Number(value)
-    if (!isFinite(number)) return "—"
-    return Math.round(number * 100) + "%"
-  }
-
-  // Fcitx key names as a person would say them.
-  function friendlyKey(name) {
-    var names = {
-      "grave": "`", "asciitilde": "~", "Tab": "Tab", "Shift+Tab": "Shift+Tab",
-      "Control+space": "Ctrl+Space", "Return": "Enter", "space": "Space",
-      "Escape": "Esc", "Right": "→", "End": "End"
-    }
-    var key = String(name || "")
-    if (names[key] !== undefined) return names[key]
-    return key.replace("Control+", "Ctrl+").replace("Alt+", "Alt+")
-  }
-
-  function fullAcceptKeys() {
-    var keys = settings.full_accept_keys || []
-    if (keys.length === 0) return "Shift+Tab"
-    var names = []
-    for (var i = 0; i < keys.length; i++) names.push(friendlyKey(keys[i]))
-    return names.join(" or ")
-  }
-
-  function headline() {
-    if (settingUp) return "Setting up…"
-    if (!installed) return "Not installed yet"
-    if (!serviceUp) return "Input service is not running"
-    if (!enabled) return "Paused"
-    if (!modelLoaded) return "On · model warming up"
-    return "On · suggesting as you type"
-  }
+  readonly property var selectedModel: Model.modelById(availableModels, selectedModelId)
+  readonly property var modelOptions: Model.modelOptions(availableModels)
 
   function refresh() {
     if (statusProcess.running) return
@@ -122,19 +72,14 @@ Panel {
   }
 
   function runInstaller() {
-    if (installProcess.running) return
     message = "Opening a terminal for setup…"
-    installProcess.running = true
+    Quickshell.execDetached(["omarchy-launch-floating-terminal-with-presentation", root.installerPath])
     setupRefresh.restart()
   }
 
-  function finalLine(text) {
-    var lines = String(text || "").trim().split("\n")
-    return lines.length > 0 ? lines[lines.length - 1] : ""
-  }
-
-  function openDemo() { if (!demoProcess.running) demoProcess.running = true }
-  function openLogs() { if (!openLogsProcess.running) openLogsProcess.running = true }
+  function openDemo() { Quickshell.execDetached([root.controlPath, "demo"]) }
+  function openLogs() { Quickshell.execDetached(["xdg-open", root.statePath]) }
+  function openModelTerms() { Quickshell.execDetached(["xdg-open", "https://huggingface.co/google/gemma-3-4b-pt-qat-q4_0-gguf"]) }
 
   function open() {
     refresh()
@@ -189,7 +134,7 @@ Panel {
           PanelHero {
             width: parent.width
             title: "Oma Tab"
-            meta: root.headline()
+            meta: Model.headline(root.status)
             detail: !root.installed ? "" : root.modelLoaded ? "READY" : "COLD"
             foreground: root.foreground
             fontFamily: root.fontFamily
@@ -269,7 +214,7 @@ Panel {
 
             Text {
               width: parent.width
-              text: "Opens a terminal you can watch. Installs Ollama and a few packages, builds Oma Tab, and downloads a model sized to your GPU (2 to 4 GB). A few minutes."
+              text: "Opens a terminal you can watch and asks for your password to install packages. It installs Ollama, builds Oma Tab, makes it your Fcitx input method, and downloads a model sized to your GPU (2 to 4 GB). A few minutes."
               textFormat: Text.PlainText
               color: root.dim
               font.family: root.fontFamily
@@ -319,7 +264,7 @@ Panel {
               }
 
               InfoRow { label: "Take one word"; value: "Tab" }
-              InfoRow { label: "Take it all"; value: root.fullAcceptKeys() }
+              InfoRow { label: "Take it all"; value: Model.fullAcceptKeys(root.settings) }
               InfoRow { label: "Ignore it"; value: "Just keep typing" }
             }
 
@@ -386,7 +331,7 @@ Panel {
               }
 
               InfoRow { label: "Download"; value: root.selectedModel.download_gb ? root.selectedModel.download_gb + " GB" : "—" }
-              InfoRow { label: "GPU memory in use"; value: root.formatBytes(root.status.model_vram_bytes) }
+              InfoRow { label: "GPU memory in use"; value: Model.formatBytes(root.status.model_vram_bytes) }
 
               Text {
                 visible: root.selectedModel.requires_terms === true
@@ -409,7 +354,7 @@ Panel {
                   text: "Review terms"
                   bordered: true
                   focusable: true
-                  onClicked: if (!modelTermsProcess.running) modelTermsProcess.running = true
+                  onClicked: root.openModelTerms()
                 }
 
                 Button {
@@ -457,7 +402,7 @@ Panel {
                 }
                 Metric {
                   width: (parent.width - parent.spacing * 2) / 3
-                  value: root.percent(root.telemetry.acceptance_rate)
+                  value: Model.percent(root.telemetry.acceptance_rate)
                   label: "TAKEN"
                 }
               }
@@ -601,8 +546,7 @@ Panel {
             root.selectedModelId = String(root.status.model_id || "")
           if (!root.actionBusy) root.message = ""
         } catch (error) {
-          root.status = ({})
-          root.message = ""
+          // Keep what we had rather than blanking the panel on a bad read.
         }
         root.loading = false
       }
@@ -628,31 +572,15 @@ Panel {
     }
     onExited: function(exitCode) {
       root.actionBusy = false
-      var detail = root.finalLine(exitCode === 0 ? root.actionOutput : root.actionError)
+      var detail = Model.finalLine(exitCode === 0 ? root.actionOutput : root.actionError)
       root.message = exitCode === 0 ? "" : (detail !== "" ? detail : "That did not work.")
       actionRefresh.restart()
     }
   }
 
-  Process {
-    id: installProcess
-    command: ["omarchy-launch-floating-terminal-with-presentation", root.installerPath]
-  }
 
-  Process {
-    id: demoProcess
-    command: ["setsid", "-f", root.controlPath, "demo"]
-  }
 
-  Process {
-    id: openLogsProcess
-    command: ["xdg-open", root.statePath]
-  }
 
-  Process {
-    id: modelTermsProcess
-    command: ["xdg-open", "https://huggingface.co/google/gemma-3-4b-pt-qat-q4_0-gguf"]
-  }
 
   Timer {
     id: actionRefresh
