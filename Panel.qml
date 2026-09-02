@@ -537,6 +537,13 @@ Panel {
   Process {
     id: statusProcess
     command: [root.controlPath, "status", "--json"]
+    // No start means no CLI: show the install state, not stale data.
+    property bool launched: false
+    onStarted: launched = true
+    onRunningChanged: {
+      if (running) launched = false
+      else if (!launched) { root.status = ({}); root.loading = false }
+    }
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
@@ -552,11 +559,6 @@ Panel {
       }
     }
     stderr: StdioCollector { waitForEnd: true }
-    onExited: function(exitCode) {
-      // No CLI at all means Oma Tab was never installed; the panel shows the
-      // install state rather than an error.
-      if (exitCode !== 0 && !root.installed) root.loading = false
-    }
   }
 
   Process {

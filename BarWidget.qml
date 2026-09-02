@@ -90,6 +90,14 @@ BarWidget {
     // --brief skips the quality report, so this poll costs a few
     // milliseconds instead of half a second.
     command: [root.controlPath, "status", "--json", "--brief"]
+    // A process that never starts produces no output, so the stale-data
+    // rule would keep an old "on" forever. No start means no CLI.
+    property bool launched: false
+    onStarted: launched = true
+    onRunningChanged: {
+      if (running) launched = false
+      else if (!launched) root.status = ({})
+    }
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: root.applyStatus(text)
@@ -107,7 +115,8 @@ BarWidget {
   }
 
   Timer {
-    interval: root.settingUp ? 2000 : 10000
+    // Slow right down when there is nothing to poll yet.
+    interval: root.settingUp ? 2000 : (root.installed ? 10000 : 60000)
     running: true
     repeat: true
     triggeredOnStart: true
