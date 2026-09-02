@@ -4,7 +4,7 @@ The bar widget for [Oma Tab](https://github.com/r3dbars/tilde-linux): private,
 local AI autocomplete for everything you type. Type, pause, and a grey
 suggestion appears. `Tab` takes a word; `Shift+Tab` takes it all.
 
-The widget is a `~` in the bar. Click it for the panel, right-click to pause
+The widget is a `⇥` in the bar. Click it for the panel, right-click to pause
 or resume suggestions.
 
 The panel:
@@ -24,7 +24,7 @@ The panel:
 omarchy plugin add https://github.com/r3dbars/omarchy-omatab --enable
 ```
 
-Then click the `~` in the bar and press **Install Oma Tab**. That runs
+Then click the `⇥` in the bar and press **Install Oma Tab**. That runs
 `install.sh`, which clones Oma Tab into `~/.local/src/omatab`, installs the
 packages it needs, builds it, wires it into Fcitx, and downloads a model that
 fits your GPU. Everything stays on your machine.

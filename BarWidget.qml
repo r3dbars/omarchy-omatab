@@ -85,7 +85,7 @@ BarWidget {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: "~"
+    text: "⇥"
     fontSize: Style.font.title
     active: root.installed && root.suggesting
     dimmed: !root.installed || !root.ready

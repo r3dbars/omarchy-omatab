@@ -196,7 +196,7 @@ Panel {
             iconOpacity: root.installed && root.enabled ? 1.0 : 0.45
             iconComponent: Component {
               Text {
-                text: "~"
+                text: "⇥"
                 color: root.installed && root.enabled ? root.accent : root.foreground
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.display
