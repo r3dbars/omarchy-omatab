@@ -1,36 +1,41 @@
-# Tilde for Omarchy
+# Oma Tab for Omarchy
 
-An Omarchy bar widget and settings panel for
-[Tilde Linux](https://github.com/r3dbars/tilde-linux).
+The bar widget for [Oma Tab](https://github.com/r3dbars/tilde-linux): private,
+local AI autocomplete for everything you type. Type, pause, and a grey
+suggestion appears. `Tab` takes a word; `Shift+Tab` takes it all.
 
-The first local build provides:
+The widget is a `~` in the bar. Click it for the panel, right-click to pause
+or resume suggestions.
 
-- Tilde on/off control
-- Curated Qwen and Gemma model picker
-- Explicit download-and-use flow with model size and completion mode
-- Active model and GPU memory status
-- Context size and model warmup status
-- Median latency, shown suggestions, and acceptance rate
-- Private telemetry location and local-only reminder
-- Warm, restart, logs, and refresh actions
+The panel:
 
-## Requirements
+- Installs Oma Tab itself if it is missing, in a terminal you can watch, and
+  shows setup progress in the panel.
+- One switch for suggestions, one for reading the screen, one for the
+  private local log.
+- Shows which keys take a word and take everything.
+- A model picker sized to your GPU, with an explicit download step.
+- Median latency, suggestions shown, and how many you accepted.
+- Try-it demo, update, and restart.
 
-Install Tilde Linux first so `~/.local/bin/tilde-control` is available.
+## Install
+
+```bash
+omarchy plugin add https://github.com/r3dbars/omarchy-omatab --enable
+```
+
+Then click the `~` in the bar and press **Install Oma Tab**. That runs
+`install.sh`, which clones Oma Tab into `~/.local/src/omatab`, installs the
+packages it needs, builds it, wires it into Fcitx, and downloads a model that
+fits your GPU. Everything stays on your machine.
 
 ## Local development
 
 ```bash
 omarchy plugin validate .
-omarchy plugin add <git-url> --enable
 ```
 
 The shell reloads saved plugin files automatically.
-
-Model selection never downloads on a dropdown change alone. The user must
-press **Download & use**; Tilde keeps the active model until the new model has
-downloaded, warmed, and passed a local generation check. Gemma choices link to
-the required Google model terms.
 
 ## License
 
