@@ -3,7 +3,7 @@
 # The bar widget runs this in a floating terminal; it also works by hand.
 set -euo pipefail
 
-repo_url=${OMATAB_REPO_URL:-https://github.com/r3dbars/tilde-linux.git}
+repo_url=${OMATAB_REPO_URL:-https://github.com/r3dbars/omatab.git}
 source_dir=${OMATAB_SOURCE_DIR:-$HOME/.local/src/omatab}
 state_dir=${XDG_STATE_HOME:-$HOME/.local/state}/omatab
 

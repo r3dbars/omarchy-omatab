@@ -2,7 +2,7 @@
 
 ![Oma Tab panel](preview.png)
 
-The bar widget for [Oma Tab](https://github.com/r3dbars/tilde-linux): private,
+The bar widget for [Oma Tab](https://github.com/r3dbars/omatab): private,
 local AI autocomplete for everything you type. Type, pause, and a grey
 suggestion appears. `Tab` takes a word; `Shift+Tab` takes it all. Nothing you
 type leaves your computer.
