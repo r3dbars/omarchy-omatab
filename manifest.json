@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "r3dbars.omatab",
   "name": "Oma Tab",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "author": "r3dbars",
   "license": "MIT",
   "description": "On-device AI autocomplete for anywhere you type in Omarchy. It predicts what you are about to say next and shows it in grey while you type. Tab takes the next word. Shift+Tab takes the whole phrase. Keep typing and it goes away. It can read the window you are in, so replies fit what you are answering. The model runs on your own computer, so nothing you type ever leaves it. Click the bar icon to turn it on or off and pick the model.",

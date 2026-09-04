@@ -11,7 +11,7 @@
 set -euo pipefail
 
 readonly repo_url=https://github.com/r3dbars/omatab.git
-readonly OMATAB_COMMIT=60accc4dfff851fa08b1800bfc49ededcb23e26d
+readonly OMATAB_COMMIT=260ca82909e31f6b7f9ec3e9dd92535b18db1a2b
 readonly source_root=$HOME/.local/src
 readonly source_dir=$source_root/omatab
 
