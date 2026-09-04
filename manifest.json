@@ -2,19 +2,17 @@
   "schemaVersion": 1,
   "id": "r3dbars.omatab",
   "name": "Oma Tab",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "author": "r3dbars",
   "license": "MIT",
-  "description": "Autocomplete for everything you type, not just code. Pause for a beat and a grey suggestion appears inline in any app. Tab takes one word, Shift+Tab takes the whole thing, and typing on ignores it. It can read the window you are in, so replies fit the conversation you are answering. This widget turns it on and off, picks a model sized to your GPU, and shows how fast it answers and how often you accept. Everything runs on your machine through Ollama. Nothing you type leaves it.",
-  "kinds": [
-    "bar-widget"
-  ],
+  "description": "On-device AI autocomplete for anywhere you type in Omarchy. It predicts what you are about to say next and shows it in grey while you type. Tab takes the next word. Shift+Tab takes the whole phrase. Keep typing and it goes away. It can read the window you are in, so replies fit what you are answering. The model runs on your own computer, so nothing you type ever leaves it. Click the bar icon to turn it on or off and pick the model.",
+  "kinds": ["bar-widget"],
   "entryPoints": {
     "barWidget": "BarWidget.qml"
   },
   "barWidget": {
     "displayName": "Oma Tab",
-    "description": "Turn local AI autocomplete on or off, pick a model, and see how fast it answers and how often you take its suggestions.",
+    "description": "Turn on-device autocomplete on or off, pick the model, and see how often you take its suggestions.",
     "category": "AI",
     "allowMultiple": false,
     "defaultSection": "right"
